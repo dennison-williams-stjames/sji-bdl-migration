@@ -79,7 +79,7 @@ async function authorize() {
  * @see https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit
  * @param {google.auth.OAuth2} auth The authenticated Google OAuth client.
  */
-async function getBDLResponses(auth) {
+async function getGoogleBDLResponses(auth) {
   const sheets = google.sheets({version: 'v4', auth});
   const res = await sheets.spreadsheets.values.get({
     // SJI BDL Results sheet: 1TLQJW0WDX2CqZIpwRHr84o1_4M_weOyMpOI8BzRG7CE
@@ -97,6 +97,66 @@ async function getBDLResponses(auth) {
     return;
   }
   return rows;
+}
+
+async function getNodeBDLResponses() {
+  if (!process.env.API_SERVER) {
+     console.warn('process.env.API_SERVER is not set using default: localhost');
+  }
+  const server = process.env.API_SERVER || 'localhost';
+
+  if (!process.env.API_USER) {
+     console.warn('process.env.API_USER is not set using default: sji-bdl');
+  }
+  const user = process.env.API_USER || 'sji-bdl';
+
+  if (!process.env.API_PASSWORD) {
+     console.warn('process.env.API_PASSWORD is not set using default: sji-bdl');
+  }
+  const pass = process.env.API_PASSWORD || 'sji-bdl';
+
+  auth = '';
+  prefix = "http://";
+
+  // TODO: Log into the BDL API: /api/admins/login
+  // This will not use https in development
+  if ( process.env.NODE_ENV == 'production' ) {
+    prefix = 'https://';
+  } else {
+    console.warn('process.env.NODE_ENV not set using default: development');
+  }
+
+  console.debug(prefix + server +'/api/admins/login {email: '+ user +'}');
+  return axios.post(prefix + server +'/api/admins/login', { email: user, password: pass })
+    .then((response) => {
+      auth = response.headers['x-auth'];
+      console.debug('x-auth: '+ auth);
+      console.debug(prefix + server +'/api/admins/reports');
+      const config = {
+        headers: { 'x-auth': auth }
+      };
+      axios.get(prefix + server + '/api/admins/reports', config)
+        //.then((response) => response.data.json())
+	.then((json) => {
+	  //console.log(json.data);
+	  json.data.forEach(function(val, i) {
+	    console.log(i +': ');
+	    console.log(val);
+	    exit;
+	    //console.log(val.assaultType);
+	  });
+        })
+	.catch((error) => {
+          console.log('There was an error fetching the reports: ', error);
+        });
+    })
+    .catch((error) => {
+      console.error(error);
+      return;
+    })
+    .finally(function () {
+      console.debug('login finished');
+    });
 }
 
 // Documentation of the Google BDL columns
@@ -152,83 +212,49 @@ async function saveBDLResponses(responses) {
 // The sji-bdl-api/reports/search only returns edited reports, so we will have
 // to use one of the admin paths.  sji-bdl-api/admins/reports looks like a good
 // candidate but it looks like it only returns edited reports
-async function importBDLResponses(responses) {
-
-  // Log into the BDL API: /api/admins/login
-  // looking through the test code it is not clear how to get an auth token
-  // from the api.  The examples only show known tokens being loaded from file
-
-  /* This is how the client logs in an admin user
-  axios.post('https://st-james-bdl-api.herokuapp.com/api/admins/login', {
-      email: this.refs.email.getValue(),
-      password: this.refs.password.getValue()
-  })
-  .then((response) => {
-    sessionStorage.setItem('auth', response.headers['x-auth']);
-    browserHistory.push('/admin-reports');
-  })
-  .catch((error) => {
-    console.log('Something went wrong ', error);
-    browserHistory.push('/admin-login');
-    // Post some popup saying that login failed
-  });
-  */
-  if (!process.env.API_SERVER) {
-     console.error('process.env.API_SERVER is not set');
-     return;
-  }
-  const server = process.env.API_SERVER;
-
-  if (!process.env.API_USER) {
-     console.error('process.env.API_USER is not set');
-     return;
-  }
-  const user = process.env.API_USER;
-
-  if (!process.env.API_PASSWORD) {
-     console.error('process.env.API_PASSWORD is not set');
-     return;
-  }
-  const pass = process.env.API_PASSWORD;
-
-  auth = '';
-  axios.post('https://'+ server +'/api/admins/login', { email: user, password: pass })
-    .then((response) => {
-      console.debug('x-auth header: ');
-      console.debug(response.headers['x-auth']);
-      auth = response.headers['x-auth'];
-    })
-    .catch((error) => {
-      console.error(error);
-      return;
-    });
-
-  if (!auth) {
-    console.error('Unable to log in as '+ user);
-    return;
-  }
-	
-  // TODO: create an admin search function: /api/admins/search
-  // Get all reports from the admin interface: /api/admins/reports
-  reports = '';
-  const config = {
-    headers: { 'x-auth': auth }
-  };
-  axios.get('https://'+ server + '/api/admins/reports', config)
-    .then((response) => {
-      reports = response.data;
-    }).catch((error) => {
-      console.log('There was an error fetching the reports: ', error);
-      return;
-    });
-  if (!reports) {
-    console.warn('No reports were received from '+ server);
-    return;
-  }
-
-  console.debug('reports ', reports);
-  return responses;
+async function importBDLResponses(google, node) {
+  console.debug('node reports ', node);
 }
+
+// We should search by date city and bad date name
+function isGoogleReportInNode(gReport, node) {
+  var gDate = gReport[0];
+  var gCity = gReport[2];
+  var gBDName = gReport[11];
+}
+
+/*
+This is what a bad date report looks like from the /api/admins/reports
+{
+  assaultType: [ 'Robbery', 'Client drunk/high' ],
+  edited: false,
+  _id: '63cf2fc3e59ffc1509471218',
+  city: 'San Francisco',
+  locationType: 'Hotel/Motel',
+  geolocation: {
+    type: 'Point',
+    _id: '63cf2fc3e59ffc1509471219',
+    coordinates: [ -122.41, 37.77 ]
+  },
+  gender: 'female',
+  date: '2016-05-18T16:00:00.000Z',
+  assaultDescription: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse molestie rutrum lorem. Green pants. Cras feugiat nulla augue, eget fringilla odio ultrices a. Duis eu bibendum metus.',
+  perpetrator: {
+    _id: '63cf2fc3e59ffc150947121a',
+    name: 'Bobby',
+    phone: '5555555555',
+    email: 'test@test.com',
+    perpType: 'cop',
+    gender: 'male',
+    age: '32',
+    race: 'white',
+    height: "5'10",
+    hair: 'black hair',
+    attributes: 'tattoo on right arm'
+  },
+  __v: 0
+}
+ */
 
 // Exports responses from the mongo/node BDL to the google/forms/sheets BDL
 async function exportBDLResponses(responses) {
@@ -241,9 +267,22 @@ async function exportBDLResponses(responses) {
   return responses;
 }
 
+/*
+var gResp = 
 authorize()
-  .then(getBDLResponses)
-  //.then(printBDLResponses)
-  .then(importBDLResponses)
+  .then(getGoogleBDLResponses)
+  .then((response) => {
+    gResp = response;
+    console.debug(gResp);
+  })
   .catch(console.error);
+*/
 
+getNodeBDLResponses()
+  .then((response) => {
+    console.log(response);
+  });
+/*
+  */
+
+//importBDLResponses(gResp, nResp);
