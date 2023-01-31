@@ -270,11 +270,22 @@ async function importBDLResponses(googleResponses) {
       first = 1;
       continue;
     }
-    console.debug(`${response[0]}: ${response[2]}, ${response[11]}`);
+    console.debug(`${response[1]}: ${response[2]}, ${response[11]}`);
     let url = PREFIX + API_SERVER + '/api/admins/reports/search?';
+    let d2;
 
     if (response[0]) {
-      url = url + "date="+ response[0] +"&";
+      d = new Date(response[0]);
+      month = d.getMonth() + 1;
+      month = month.toString();
+      month = month.padStart(2, '0');
+
+      day = d.getDate();
+      day = day.toString().padStart(2, '0');
+
+      d2 = d.getFullYear() +'-'+ month +'-'+ day;
+
+      url = url + "date="+ d2 +"&";
     }
 
     if (response[11]) {
@@ -285,17 +296,81 @@ async function importBDLResponses(googleResponses) {
       url = url + "city="+ response[2] +"&";
     }
 
-    url = PREFIX + API_SERVER + '/api/admins/reports/search?date=2017-05-18T16:00:00Z&name=Philip&city=Oakland';
-    console.debug(url);
+    console.debug('importBDLResponses() '+ url);
     let found = await axios.get(url, JSON.parse(config))
-    .then((json) => {
-      console.log('importBDLResponses() json:');
-      console.log(json.data);
-      return googleResponses;
-    })
     .catch((error) => {
       throw new TypeError(error.message + ', There was an error searching node reports');
     });
+
+    if (found.length) {
+      continue;
+    }
+
+    url = PREFIX + API_SERVER + '/api/reports/new';
+    let submission = {};
+    submission.city = response[2];
+    submission.locationType = response[3];
+    submission.gender = response[6];
+    submission.date = d2;
+    submission.date = response[1];
+    submission.asaultType = response[4];
+    submission.assaultDescription = '';
+    
+    if(response[5]) {
+      submission.assaultDescription.concat('Details: '+ response[5] +"\n");
+    }
+
+    if(response[27]) {
+      submission.assaultDescription.concat('What happened: '+ response[27] +"\n");
+    }
+
+    if(response[29]) {
+      submission.assaultDescription.concat('Additional Comments: '+ response[29] +"\n");
+    }
+
+    submission.assaultDescription = response[5];
+    submission.perpetrator = {};
+    submission.perpetrator.name = response[11];
+    submission.perpetrator.phone = response[13];
+    submission.perpetrator.gender = response[15];
+    submission.perpetrator.age = response[12];
+    submission.perpetrator.race = response[16];
+    submission.perpetrator.height = response[17];
+    submission.perpetrator.perpType = 'N/A';
+    submission.perpetrator.attributes = "";
+   
+    if (response[19]) {
+      submission.perpetrator.attributes.concat("physical attributes: "+ response[19]);
+    }
+
+    if (response[18]) {
+      submission.perpetrator.attributes.concat(" body type: "+ response[18]);
+    }
+
+    if (response[20]) {
+      submission.perpetrator.attributes.concat(" vehicle info: "+ response[20]);
+    }
+
+    submission.perpetrator.attributes.concat("physical attributes: "+ response[19]);
+    submission.perpetrator.hair = response[19];
+    //console.debug(submission);
+    console.log('importBDLResponses() '+ url);
+
+    // we do not need to authenticate to add a report
+    //let report = await axios.post(url, submission, JSON.parse(config))
+    let report = await axios.post(url, submission)
+    .then((response) => {
+      console.log('importBDLResponses() response: ');
+      console.log(response);
+      return response;
+    })
+    .catch((error) => {
+      console.debug('importBDLResponses() adding report failed: '+ Object.keys(error));
+      console.debug(error.response.data.error);
+      throw new TypeError(error.message + ', There was an error adding a node report');
+    });
+    console.log('importBDLResponses() added submission');
+
   return googleResponses;
   }
   return googleResponses;
