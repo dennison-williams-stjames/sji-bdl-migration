@@ -1,3 +1,5 @@
+// An interesting discussion on the fs.promises interface:
+// https://stackoverflow.com/questions/74516234/understanding-node-js-requirefs-vs-requirefs-promises
 const fs = require('fs').promises;
 const path = require('path');
 const process = require('process');
@@ -20,6 +22,31 @@ const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
 // time.
 const TOKEN_PATH = path.join(process.cwd(), 'token.json');
 const CREDENTIALS_PATH = path.join(process.cwd(), 'credentials.json');
+const NODE_SESSION_PATH = path.join(process.cwd(), 'nodesession.json');
+
+if (!process.env.API_SERVER) {
+  console.warn('process.env.API_SERVER is not set using default: localhost');
+}
+const API_SERVER = process.env.API_SERVER || 'localhost';
+
+if (!process.env.API_USER) {
+  console.warn('process.env.API_USER is not set using default: sji-bdl');
+}
+const API_USER = process.env.API_USER || 'sji-bdl';
+
+if (!process.env.API_PASSWORD) {
+  console.warn('process.env.API_PASSWORD is not set using default: sji-bdl');
+}
+const API_PASSWORD = process.env.API_PASSWORD || 'sji-bdl';
+
+// TODO: Log into the BDL API: /api/admins/login
+// This will not use https in development
+var PREFIX = 'http://';
+if ( process.env.NODE_ENV == 'production' ) {
+  PREFIX = 'https://';
+} else {
+  console.warn('process.env.NODE_ENV not set using default: development');
+}
 
 /**
  * Reads previously authorized credentials from the save file.
@@ -27,13 +54,31 @@ const CREDENTIALS_PATH = path.join(process.cwd(), 'credentials.json');
  * @return {Promise<OAuth2Client|null>}
  */
 async function loadSavedCredentialsIfExist() {
+  console.debug('loadSavedCredentialsIfExist()');
   try {
+  console.debug(TOKEN_PATH);
     const content = await fs.readFile(TOKEN_PATH);
     const credentials = JSON.parse(content);
     return google.auth.fromJSON(credentials);
   } catch (err) {
-    return null;
+    return new TypeError(err.message +', could not load saved credentials');;
   }
+}
+
+async function loadSavedNodeSessionIfExist() {
+  console.debug('loadSavedNodeSessionIfExist() '+ NODE_SESSION_PATH);
+  return fs.readFile(NODE_SESSION_PATH, 'ascii')
+    .then(function(response) {
+      try {
+	// TODO: do not check this in
+        console.debug("loadSavedNodeSessionIfExist() read: "+ response);
+	return response;
+      } catch(error) {
+        console.error(error);
+        throw new TypeError(error.message);
+      }
+      return JSON.parse(response);
+    })
 }
 
 /**
@@ -42,7 +87,7 @@ async function loadSavedCredentialsIfExist() {
  * @param {OAuth2Client} client
  * @return {Promise<void>}
  */
-async function saveCredentials(client) {
+async function saveCredentials(config) {
   const content = await fs.readFile(CREDENTIALS_PATH);
   const keys = JSON.parse(content);
   const key = keys.installed || keys.web;
@@ -55,12 +100,18 @@ async function saveCredentials(client) {
   await fs.writeFile(TOKEN_PATH, payload);
 }
 
+async function saveNodeSession(config) {
+  console.debug('saveNodeSession() config: '+ config);
+  await fs.writeFile(NODE_SESSION_PATH, config);
+}
+
 /**
  * Load or request or authorization to call APIs.
  *
  */
 async function authorize() {
   let client = await loadSavedCredentialsIfExist();
+  console.debug('authorize()');
   if (client) {
     return client;
   }
@@ -74,12 +125,42 @@ async function authorize() {
   return client;
 }
 
+async function authorizeNode() {
+  console.debug('authorizeNode()');
+  var SNS = await loadSavedNodeSessionIfExist()
+    .then((response) => {
+      if (response) {
+        // because this is an async function this return is the same as
+        // return Promise.resolve(client);
+        // https://javascript.info/async-await
+        return response;
+      }
+    })
+    .catch((error) => {
+      throw new TypeError(error.message);
+    });
+
+  // If we have a Saved Node Session then we should verify it is still valid
+  // and return it
+  if (SNS) {
+    console.debug('authorizeNode(): '+ PREFIX + API_SERVER + '/users/me');
+    return await axios.get(PREFIX + API_SERVER + '/users/me', JSON.parse(SNS))
+    .then((json) => {
+      return SNS;
+    })
+    .catch((error) => {
+      throw new TypeError(error.message + ', There was an error verifying saved credentials');
+    });
+  }
+}
+
 /**
  * Prints the names and majors of students in a sample spreadsheet:
  * @see https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit
  * @param {google.auth.OAuth2} auth The authenticated Google OAuth client.
  */
 async function getGoogleBDLResponses(auth) {
+  console.log('getGoogleBDLResponses(auth)');
   const sheets = google.sheets({version: 'v4', auth});
   const res = await sheets.spreadsheets.values.get({
     // SJI BDL Results sheet: 1TLQJW0WDX2CqZIpwRHr84o1_4M_weOyMpOI8BzRG7CE
@@ -93,69 +174,27 @@ async function getGoogleBDLResponses(auth) {
   });
   const rows = res.data.values;
   if (!rows || rows.length === 0) {
-    console.log('No data found.');
+    console.warn('No data found.');
     return;
   }
   return rows;
 }
 
-async function getNodeBDLResponses() {
-  if (!process.env.API_SERVER) {
-     console.warn('process.env.API_SERVER is not set using default: localhost');
-  }
-  const server = process.env.API_SERVER || 'localhost';
+async function getNodeBDLResponses(config) {
+  if (!config) {
+    console.error('getNodeBDLResponse(config) config not set');
+    console.error(config);
+    return null;
+  } 
 
-  if (!process.env.API_USER) {
-     console.warn('process.env.API_USER is not set using default: sji-bdl');
-  }
-  const user = process.env.API_USER || 'sji-bdl';
-
-  if (!process.env.API_PASSWORD) {
-     console.warn('process.env.API_PASSWORD is not set using default: sji-bdl');
-  }
-  const pass = process.env.API_PASSWORD || 'sji-bdl';
-
-  auth = '';
-  prefix = "http://";
-
-  // TODO: Log into the BDL API: /api/admins/login
-  // This will not use https in development
-  if ( process.env.NODE_ENV == 'production' ) {
-    prefix = 'https://';
-  } else {
-    console.warn('process.env.NODE_ENV not set using default: development');
-  }
-
-  console.debug(prefix + server +'/api/admins/login {email: '+ user +'}');
-  return axios.post(prefix + server +'/api/admins/login', { email: user, password: pass })
-    .then((response) => {
-      auth = response.headers['x-auth'];
-      console.debug('x-auth: '+ auth);
-      console.debug(prefix + server +'/api/admins/reports');
-      const config = {
-        headers: { 'x-auth': auth }
-      };
-      axios.get(prefix + server + '/api/admins/reports', config)
-        //.then((response) => response.data.json())
-	.then((json) => {
-	  //console.log(json.data);
-	  json.data.forEach(function(val, i) {
-	    console.log(i +': ');
-	    console.log(val);
-	    exit;
-	    //console.log(val.assaultType);
-	  });
-        })
-	.catch((error) => {
-          console.log('There was an error fetching the reports: ', error);
-        });
+  console.debug('getNodeBDLResponses(config): '+ PREFIX + API_SERVER + '/api/admins/reports');
+  return axios.get(PREFIX + API_SERVER + '/api/admins/reports', JSON.parse(config))
+    .then((json) => {
+      return json;
     })
     .catch((error) => {
-      console.error(error);
-      return;
-    })
-    .finally(function () {
-      console.debug('login finished');
+      console.error('There was an error fetching the reports: ', error);
+      return null;
     });
 }
 
@@ -194,9 +233,18 @@ async function getNodeBDLResponses() {
 */
 
 // Utility functioning for displaying the results
-async function printBDLResponses(responses) {
+async function printGoogleBDLResponses(responses) {
+  console.debug('printGoogleBDLResponses()');
   for (const response of responses) { 
-    console.debug(`${response[0]}: ${response[2]}`);
+    console.debug(`${response[0]}: ${response[2]}, ${response[11]}`);
+  }
+  return responses;
+}
+
+async function printNodeBDLResponses(responses) {
+  for (const response of responses) { 
+    let date = new Date(response.date).toDateString();
+    console.log(`${date}: ${response.city}, ${response.perpetrator.name}`);
   }
   return responses;
 }
@@ -209,18 +257,68 @@ async function saveBDLResponses(responses) {
 // Imports responses from the google/forms/sheets BDL into the mongo/node BDL
 // Loop across each report and using the sji-bdl-api try and find the report
 //
-// The sji-bdl-api/reports/search only returns edited reports, so we will have
-// to use one of the admin paths.  sji-bdl-api/admins/reports looks like a good
-// candidate but it looks like it only returns edited reports
-async function importBDLResponses(google, node) {
-  console.debug('node reports ', node);
+// sji-bdl-api/api/admins/reports/search is the path we will use to determine
+// if the report is recorded in the node application.  If it is not already
+// entered we will add it
+async function importBDLResponses(googleResponses) {
+  console.debug('importBDLResponses()');
+  let config = await authorizeNode();
+  let first = 0;
+
+  for (const response of googleResponses) { 
+    if (!first) {
+      first = 1;
+      continue;
+    }
+    console.debug(`${response[0]}: ${response[2]}, ${response[11]}`);
+    let url = PREFIX + API_SERVER + '/api/admins/reports/search?';
+
+    if (response[0]) {
+      url = url + "date="+ response[0] +"&";
+    }
+
+    if (response[11]) {
+      url = url + "name="+ response[11] +"&";
+    }
+
+    if (response[2]) {
+      url = url + "city="+ response[2] +"&";
+    }
+
+    url = PREFIX + API_SERVER + '/api/admins/reports/search?date=2017-05-18T16:00:00Z&name=Philip&city=Oakland';
+    console.debug(url);
+    let found = await axios.get(url, JSON.parse(config))
+    .then((json) => {
+      console.log('importBDLResponses() json:');
+      console.log(json.data);
+      return googleResponses;
+    })
+    .catch((error) => {
+      throw new TypeError(error.message + ', There was an error searching node reports');
+    });
+  return googleResponses;
+  }
+  return googleResponses;
 }
 
 // We should search by date city and bad date name
-function isGoogleReportInNode(gReport, node) {
+function isGoogleReportInNode(gReport, node, config) {
   var gDate = gReport[0];
   var gCity = gReport[2];
   var gBDName = gReport[11];
+
+  var path = prefix + server +'/api/admins/reports/search?date='
+    + $gDate +'&city='
+    + $gCity +'&name='
+    + $gBDName;
+  console.debug('isGoogleReportInNode path: '+ path);
+
+  axios.get(path)
+    .then((response) => {
+      console.debug('isGoogleReportInNode response: ');
+      console.debug(response);
+    })
+    .catch(next);
 }
 
 /*
@@ -267,21 +365,48 @@ async function exportBDLResponses(responses) {
   return responses;
 }
 
+
+// for each google report
+// check if report exists in node
+// if not, then add it to node
+
 /*
-var gResp = 
-authorize()
-  .then(getGoogleBDLResponses)
-  .then((response) => {
-    gResp = response;
-    console.debug(gResp);
-  })
-  .catch(console.error);
+*/
+async function main() {
+  let gResponses;
+  await authorize()
+    .then(getGoogleBDLResponses)
+    .then(importBDLResponses)
+    .then(printGoogleBDLResponses)
+    .catch((error) => {
+      console.debug(error);
+    });
+}
+
+/*
+async function main() {
+  await authorizeNode()
+    .then((config) => {
+      console.debug('main() received response from authorizeNode()');
+      return getNodeBDLResponses(config);
+    })
+    .then((responses) => {
+      console.debug('main() received response from getNodeBDLResponses()');
+      return responses.data;
+    })
+    .then((responses) => {
+      printNodeBDLResponses(responses);
+    })
+    .catch((error) => {
+      console.error('Did not get BDL Responses from nodejs instance: '+ API_SERVER);
+      console.error(error.message);
+    });
+}
 */
 
-getNodeBDLResponses()
-  .then((response) => {
-    console.log(response);
-  });
+main()
+  .then(() => process.exit(0), e => { console.error(e); process.exit(1) });
+
 /*
   */
 
