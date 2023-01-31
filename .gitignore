@@ -105,3 +105,7 @@ dist
 
 credentials.json
 token.json
+nodesession.json
+*.swp
+*.swo
+googleResponses.txt
