@@ -15,8 +15,6 @@ const axios = require('axios');
 // If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
 
-// TODO: rewrite the authentication to use values from a .env file
-
 // The file token.json stores the user's access and refresh tokens, and is
 // created automatically when the authorization flow completes for the first
 // time.
@@ -39,7 +37,6 @@ if (!process.env.API_PASSWORD) {
 }
 const API_PASSWORD = process.env.API_PASSWORD || 'sji-bdl';
 
-// TODO: Log into the BDL API: /api/admins/login
 // This will not use https in development
 var PREFIX = 'http://';
 if ( process.env.NODE_ENV == 'production' ) {
@@ -69,7 +66,6 @@ async function loadSavedNodeSessionIfExist() {
   return fs.readFile(NODE_SESSION_PATH, 'ascii')
     .then(function(response) {
       try {
-	// TODO: do not check this in
 	return response;
       } catch(error) {
         console.error(error);
@@ -350,11 +346,11 @@ async function importBDLResponses(googleResponses) {
     }
 
     submission.perpetrator = {};
-    submission.perpetrator.name = response[11];
+    submission.perpetrator.name = response[11] || 'N/A';
     submission.perpetrator.phone = response[13];
-    submission.perpetrator.gender = response[15];
-    submission.perpetrator.age = response[12];
-    submission.perpetrator.race = response[16];
+    submission.perpetrator.gender = response[15] || 'N/A';
+    submission.perpetrator.age = response[12] || 'N/A';
+    submission.perpetrator.race = response[16] || 'N/A';
     submission.perpetrator.height = response[17] || 'N/A';
     submission.perpetrator.perpType = 'N/A';
     submission.perpetrator.attributes = "";
@@ -392,8 +388,6 @@ async function importBDLResponses(googleResponses) {
       throw new TypeError(error.message + ', There was an error adding a node report');
     });
     console.log('importBDLResponses() added submission');
-
-  return googleResponses;
   }
   return googleResponses;
 }
@@ -456,19 +450,10 @@ async function exportBDLResponses(responses) {
   console.debug('TODO');
   return responses;
 }
-// Exports responses from the mongo/node BDL to the google/forms/sheets BDL
-async function exportBDLResponses(responses) {
-  console.debug('TODO');
-  return responses;
-}
-
 
 // for each google report
 // check if report exists in node
 // if not, then add it to node
-
-/*
-*/
 async function main() {
   let gResponses;
   await authorize()
@@ -480,31 +465,5 @@ async function main() {
     });
 }
 
-/*
-async function main() {
-  await authorizeNode()
-    .then((config) => {
-      console.debug('main() received response from authorizeNode()');
-      return getNodeBDLResponses(config);
-    })
-    .then((responses) => {
-      console.debug('main() received response from getNodeBDLResponses()');
-      return responses.data;
-    })
-    .then((responses) => {
-      printNodeBDLResponses(responses);
-    })
-    .catch((error) => {
-      console.error('Did not get BDL Responses from nodejs instance: '+ API_SERVER);
-      console.error(error.message);
-    });
-}
-*/
-
 main()
   .then(() => process.exit(0), e => { console.error(e); process.exit(1) });
-
-/*
-  */
-
-//importBDLResponses(gResp, nResp);
