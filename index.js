@@ -56,7 +56,6 @@ if ( process.env.NODE_ENV == 'production' ) {
 async function loadSavedCredentialsIfExist() {
   console.debug('loadSavedCredentialsIfExist()');
   try {
-  console.debug(TOKEN_PATH);
     const content = await fs.readFile(TOKEN_PATH);
     const credentials = JSON.parse(content);
     return google.auth.fromJSON(credentials);
@@ -71,7 +70,6 @@ async function loadSavedNodeSessionIfExist() {
     .then(function(response) {
       try {
 	// TODO: do not check this in
-        console.debug("loadSavedNodeSessionIfExist() read: "+ response);
 	return response;
       } catch(error) {
         console.error(error);
@@ -102,7 +100,7 @@ async function saveCredentials(config) {
 
 async function saveNodeSession(config) {
   console.debug('saveNodeSession() config: '+ config);
-  await fs.writeFile(NODE_SESSION_PATH, config);
+  return await fs.writeFile(NODE_SESSION_PATH, config);
 }
 
 /**
@@ -146,10 +144,26 @@ async function authorizeNode() {
     console.debug('authorizeNode(): '+ PREFIX + API_SERVER + '/users/me');
     return await axios.get(PREFIX + API_SERVER + '/users/me', JSON.parse(SNS))
     .then((json) => {
+      console.debug('authorizeNode() Saved node session still valid');
       return SNS;
     })
     .catch((error) => {
-      throw new TypeError(error.message + ', There was an error verifying saved credentials');
+      console.log('authorizeNode() Saved node session no longer valid: '+ error.message);
+      console.debug('authorizeNode() '+ PREFIX + API_SERVER +'/api/admins/login');
+      return axios.post(PREFIX + API_SERVER +'/api/admins/login', 
+	{ email: API_USER, password: API_PASSWORD })
+	.then((response) => {
+	  auth = response.headers['x-auth'];
+	  let config = {
+	    headers: { 'x-auth': auth }
+          };
+	  config = JSON.stringify(config)
+          saveNodeSession(config);
+	  return config;
+	})
+        .catch((error) => {
+          throw new TypeError(error.message + ', There was an error searching node reports');
+        });
     });
   }
 }
@@ -270,10 +284,11 @@ async function importBDLResponses(googleResponses) {
       first = 1;
       continue;
     }
-    console.debug(`${response[1]}: ${response[2]}, ${response[11]}`);
+    console.debug('importBDLResponses() '+`${response[0]}: ${response[2]}, ${response[11]}`);
     let url = PREFIX + API_SERVER + '/api/admins/reports/search?';
     let d2;
 
+    console.log('importBDLResponses() date: '+ response[0])
     if (response[0]) {
       d = new Date(response[0]);
       month = d.getMonth() + 1;
@@ -285,6 +300,7 @@ async function importBDLResponses(googleResponses) {
 
       d2 = d.getFullYear() +'-'+ month +'-'+ day;
 
+    console.log('importBDLResponses() d2: '+ d2)
       url = url + "date="+ d2 +"&";
     }
 
@@ -298,21 +314,22 @@ async function importBDLResponses(googleResponses) {
 
     console.debug('importBDLResponses() '+ url);
     let found = await axios.get(url, JSON.parse(config))
-    .catch((error) => {
-      throw new TypeError(error.message + ', There was an error searching node reports');
-    });
+      .catch((error) => {
+        throw new TypeError(error.message + ', There was an error searching node reports');
+      });
 
-    if (found.length) {
+    console.debug('importBDLResponses() found: ');
+    console.debug(found.data);
+    if (found.data.length) {
       continue;
     }
 
     url = PREFIX + API_SERVER + '/api/reports/new';
     let submission = {};
-    submission.city = response[2];
-    submission.locationType = response[3];
-    submission.gender = response[6];
+    submission.city = response[2] || 'N/A';
+    submission.locationType = response[3] || 'N/A';
+    submission.gender = response[6] || 'N/A';
     submission.date = d2;
-    submission.date = response[1];
     submission.asaultType = response[4];
     submission.assaultDescription = '';
     
@@ -328,14 +345,17 @@ async function importBDLResponses(googleResponses) {
       submission.assaultDescription.concat('Additional Comments: '+ response[29] +"\n");
     }
 
-    submission.assaultDescription = response[5];
+    if (!submission.assaultDescription) {
+      submission.assaultDescription = 'N/A';
+    }
+
     submission.perpetrator = {};
     submission.perpetrator.name = response[11];
     submission.perpetrator.phone = response[13];
     submission.perpetrator.gender = response[15];
     submission.perpetrator.age = response[12];
     submission.perpetrator.race = response[16];
-    submission.perpetrator.height = response[17];
+    submission.perpetrator.height = response[17] || 'N/A';
     submission.perpetrator.perpType = 'N/A';
     submission.perpetrator.attributes = "";
    
@@ -352,18 +372,20 @@ async function importBDLResponses(googleResponses) {
     }
 
     submission.perpetrator.attributes.concat("physical attributes: "+ response[19]);
-    submission.perpetrator.hair = response[19];
+    submission.perpetrator.hair = response[19] || 'N/A';
     //console.debug(submission);
     console.log('importBDLResponses() '+ url);
 
     // we do not need to authenticate to add a report
     //let report = await axios.post(url, submission, JSON.parse(config))
     let report = await axios.post(url, submission)
+	  /*
     .then((response) => {
       console.log('importBDLResponses() response: ');
       console.log(response);
       return response;
     })
+    */
     .catch((error) => {
       console.debug('importBDLResponses() adding report failed: '+ Object.keys(error));
       console.debug(error.response.data.error);
@@ -452,7 +474,7 @@ async function main() {
   await authorize()
     .then(getGoogleBDLResponses)
     .then(importBDLResponses)
-    .then(printGoogleBDLResponses)
+    //.then(printGoogleBDLResponses)
     .catch((error) => {
       console.debug(error);
     });
