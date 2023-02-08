@@ -287,7 +287,6 @@ async function importBDLResponses(googleResponses) {
     let d2;
     let amp = 0;
 
-    console.log('importBDLResponses() date: '+ response[0])
     if (response[0]) {
       d = new Date(response[0]);
       month = d.getMonth() + 1;
@@ -299,7 +298,6 @@ async function importBDLResponses(googleResponses) {
 
       d2 = d.getFullYear() +'-'+ month +'-'+ day;
 
-      console.log('importBDLResponses() d2: '+ d2)
       url = url + querystring.stringify({ date: d2});
       amp = amp +1;
     }
@@ -329,8 +327,6 @@ async function importBDLResponses(googleResponses) {
         throw new TypeError(error.message + ', There was an error searching node reports');
       });
 
-    console.debug('importBDLResponses() found: ');
-    console.debug(found.data);
     if (found.data.length) {
       continue;
     }
@@ -344,19 +340,71 @@ async function importBDLResponses(googleResponses) {
     submission.asaultType = response[4];
     submission.assaultDescription = '';
     
+    if(response[4]) {
+      submission.assaultDescription = submission.assaultDescription.concat('What happened?: '+ response[4] +"\n");
+    }
+
     if(response[5]) {
-      submission.assaultDescription.concat('Details: '+ response[5] +"\n");
+      submission.assaultDescription = submission.assaultDescription.concat('Details: '+ response[5] +"\n");
+    }
+
+    if(response[7]) {
+      submission.assaultDescription = submission.assaultDescription.concat('Type of work: '+ response[7] +"\n");
+    }
+
+    if(response[8]) {
+      submission.assaultDescription = submission.assaultDescription.concat('Bad date was: '+ response[8] +"\n");
+    }
+
+    if(response[9]) {
+      submission.assaultDescription = submission.assaultDescription.concat('Bad date first made contact: '+ response[9] +"\n");
+    }
+
+    if(response[10]) {
+      submission.assaultDescription = submission.assaultDescription.concat('Advert site info: '+ response[10] +"\n");
+    }
+
+    if(response[14]) {
+      submission.assaultDescription = submission.assaultDescription.concat('Bad dates email: '+ response[14] +"\n");
+    }
+
+    if(response[21]) {
+      submission.assaultDescription = submission.assaultDescription.concat('Support needed: '+ response[21] +"\n");
+    }
+
+    if(response[22]) {
+      submission.assaultDescription = submission.assaultDescription.concat('what kind of suppoort is needed: '+ response[22] +"\n");
+    }
+
+    if(response[23]) {
+      submission.assaultDescription = submission.assaultDescription.concat('contact information: '+ response[23] +"\n");
+    }
+
+    if(response[24]) {
+      submission.assaultDescription = submission.assaultDescription.concat('contact name: '+ response[24] +"\n");
+    }
+
+    if(response[25]) {
+      submission.assaultDescription = submission.assaultDescription.concat('can we say we are calling from SJI?: '+ response[25] +"\n");
+    }
+
+    if(response[26]) {
+      submission.assaultDescription = submission.assaultDescription.concat('Additional Comments: '+ response[26] +"\n");
     }
 
     if(response[27]) {
-      submission.assaultDescription.concat('What happened: '+ response[27] +"\n");
+      submission.assaultDescription = submission.assaultDescription.concat('What happened: '+ response[27] +"\n");
+    }
+
+    if(response[28]) {
+      submission.assaultDescription = submission.assaultDescription.concat(response[28] +"\n");
     }
 
     if(response[29]) {
-      submission.assaultDescription.concat('Additional Comments: '+ response[29] +"\n");
+      submission.assaultDescription = submission.assaultDescription.concat('Additional Comments: '+ response[29] +"\n");
     }
 
-    if (!submission.assaultDescription) {
+    if (!submission.assaultDescription.length) {
       submission.assaultDescription = 'N/A';
     }
 
@@ -387,8 +435,7 @@ async function importBDLResponses(googleResponses) {
       submission.perpetrator.attributes.concat(" vehicle info: "+ response[20]);
     }
 
-    submission.perpetrator.attributes.concat("physical attributes: "+ response[19]);
-    submission.perpetrator.hair = response[19] || 'N/A';
+    submission.perpetrator.hair = 'N/A';
     //console.debug(submission);
     console.log('importBDLResponses() '+ url);
 
