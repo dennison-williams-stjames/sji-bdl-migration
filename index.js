@@ -12,6 +12,8 @@ const {google} = require('googleapis');
 // Axios is used to interact with the SJI BDL API
 const axios = require('axios');
 
+const querystring = require('node:querystring');
+
 // If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
 
@@ -283,6 +285,7 @@ async function importBDLResponses(googleResponses) {
     console.debug('importBDLResponses() '+`${response[0]}: ${response[2]}, ${response[11]}`);
     let url = PREFIX + API_SERVER + '/api/admins/reports/search?';
     let d2;
+    let amp = 0;
 
     console.log('importBDLResponses() date: '+ response[0])
     if (response[0]) {
@@ -296,16 +299,28 @@ async function importBDLResponses(googleResponses) {
 
       d2 = d.getFullYear() +'-'+ month +'-'+ day;
 
-    console.log('importBDLResponses() d2: '+ d2)
-      url = url + "date="+ d2 +"&";
+      console.log('importBDLResponses() d2: '+ d2)
+      url = url + querystring.stringify({ date: d2});
+      amp = amp +1;
     }
 
     if (response[11]) {
-      url = url + "name="+ response[11] +"&";
+      if (amp) {
+        url = url + '&';
+      } else {
+        amp = amp +1;
+      }
+
+      url = url + querystring.stringify({ name: response[11]});
     }
 
     if (response[2]) {
-      url = url + "city="+ response[2] +"&";
+      if (amp) {
+        url = url + '&';
+      } else {
+        amp = amp +1;
+      }
+      url = url + querystring.stringify({ city: response[2]});
     }
 
     console.debug('importBDLResponses() '+ url);
@@ -354,6 +369,11 @@ async function importBDLResponses(googleResponses) {
     submission.perpetrator.height = response[17] || 'N/A';
     submission.perpetrator.perpType = 'N/A';
     submission.perpetrator.attributes = "";
+    submission.editedReport = null;
+	  /*
+    submission.editedReport.title = null;
+    submission.editedReport.content = null;
+    */
    
     if (response[19]) {
       submission.perpetrator.attributes.concat("physical attributes: "+ response[19]);
