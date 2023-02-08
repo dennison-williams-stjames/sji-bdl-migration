@@ -368,26 +368,6 @@ async function importBDLResponses(googleResponses) {
       submission.assaultDescription = submission.assaultDescription.concat('Bad dates email: '+ response[14] +"\n");
     }
 
-    if(response[21]) {
-      submission.assaultDescription = submission.assaultDescription.concat('Support needed: '+ response[21] +"\n");
-    }
-
-    if(response[22]) {
-      submission.assaultDescription = submission.assaultDescription.concat('what kind of suppoort is needed: '+ response[22] +"\n");
-    }
-
-    if(response[23]) {
-      submission.assaultDescription = submission.assaultDescription.concat('contact information: '+ response[23] +"\n");
-    }
-
-    if(response[24]) {
-      submission.assaultDescription = submission.assaultDescription.concat('contact name: '+ response[24] +"\n");
-    }
-
-    if(response[25]) {
-      submission.assaultDescription = submission.assaultDescription.concat('can we say we are calling from SJI?: '+ response[25] +"\n");
-    }
-
     if(response[26]) {
       submission.assaultDescription = submission.assaultDescription.concat('Additional Comments: '+ response[26] +"\n");
     }
@@ -408,6 +388,30 @@ async function importBDLResponses(googleResponses) {
       submission.assaultDescription = 'N/A';
     }
 
+    submission.support = {};
+    if(response[21]) {
+      submission.support.needSupport = response[21];
+    } else {
+      submission.support.needSupport = "No";
+    }
+
+    if(response[22]) {
+      submission.support.needSupport = 
+        submission.support.needSupport.concat("\n"+'kind of suppoort needed: '+ response[22]);
+    }
+
+    if(response[23]) {
+      submission.support.contact = response[23];
+    }
+
+    if(response[24]) {
+      submission.support.name = response[24];
+    }
+
+    if(response[25]) {
+      submission.support.callingFrom = response[25];
+    }
+
     submission.perpetrator = {};
     submission.perpetrator.name = response[11] || 'N/A';
     submission.perpetrator.phone = response[13];
@@ -418,21 +422,24 @@ async function importBDLResponses(googleResponses) {
     submission.perpetrator.perpType = 'N/A';
     submission.perpetrator.attributes = "";
     submission.editedReport = null;
-	  /*
+
+    /*  There is no edited report we can easily pull from so we will build this
+     *  from what we have
     submission.editedReport.title = null;
     submission.editedReport.content = null;
     */
    
     if (response[19]) {
-      submission.perpetrator.attributes.concat("physical attributes: "+ response[19]);
+      submission.perpetrator.attributes = response[19];
     }
 
     if (response[18]) {
-      submission.perpetrator.attributes.concat(" body type: "+ response[18]);
+      submission.perpetrator.attributes = 
+        submission.perpetrator.attributes.concat(" body type: "+ response[18]);
     }
 
     if (response[20]) {
-      submission.perpetrator.attributes.concat(" vehicle info: "+ response[20]);
+      submission.perpetrator.vehicle = response[20];
     }
 
     submission.perpetrator.hair = 'N/A';
