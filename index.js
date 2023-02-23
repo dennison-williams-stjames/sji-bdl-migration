@@ -12,7 +12,7 @@ const {google} = require('googleapis');
 // Axios is used to interact with the SJI BDL API
 const axios = require('axios');
 
-const querystring = require('node:querystring');
+const querystring = require('querystring');
 
 // If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
@@ -331,10 +331,22 @@ async function importBDLResponses(googleResponses) {
       continue;
     }
 
-    url = PREFIX + API_SERVER + '/api/reports/new';
+    let title = '';
     let submission = {};
-    submission.city = response[2] || 'N/A';
-    submission.locationType = response[3] || 'N/A';
+    if (response[2]) {
+      submission.city = response[2];
+      title = title.concat(response[2] + ' ');
+    } else {
+      submission.city = 'N/A';
+    }
+
+    if (response[3]) {
+      submission.locationType = response[3];
+      title = title.concat(response[3] + ' ');
+    } else {
+      submission.locationType = 'N/A';
+    }
+
     submission.gender = response[6] || 'N/A';
     submission.date = d2;
     submission.asaultType = response[4];
@@ -342,50 +354,65 @@ async function importBDLResponses(googleResponses) {
     
     if(response[4]) {
       submission.assaultDescription = submission.assaultDescription.concat('What happened?: '+ response[4] +"\n");
+      title = title.concat(response[4] + ' ');
     }
 
     if(response[5]) {
       submission.assaultDescription = submission.assaultDescription.concat('Details: '+ response[5] +"\n");
+      title = title.concat(response[6] + ' ');
     }
 
     if(response[7]) {
       submission.assaultDescription = submission.assaultDescription.concat('Type of work: '+ response[7] +"\n");
+      title = title.concat(response[7] + ' ');
     }
 
     if(response[8]) {
       submission.assaultDescription = submission.assaultDescription.concat('Bad date was: '+ response[8] +"\n");
+      title = title.concat(response[8] + ' ');
     }
 
     if(response[9]) {
       submission.assaultDescription = submission.assaultDescription.concat('Bad date first made contact: '+ response[9] +"\n");
+      title = title.concat(response[9] + ' ');
     }
 
     if(response[10]) {
       submission.assaultDescription = submission.assaultDescription.concat('Advert site info: '+ response[10] +"\n");
+      title = title.concat(response[10] + ' ');
     }
 
     if(response[14]) {
       submission.assaultDescription = submission.assaultDescription.concat('Bad dates email: '+ response[14] +"\n");
+      title = title.concat(response[14] + ' ');
     }
 
     if(response[26]) {
       submission.assaultDescription = submission.assaultDescription.concat('Additional Comments: '+ response[26] +"\n");
+      title = title.concat(response[26] + ' ');
     }
 
     if(response[27]) {
       submission.assaultDescription = submission.assaultDescription.concat('What happened: '+ response[27] +"\n");
+      title = title.concat(response[27] + ' ');
     }
 
     if(response[28]) {
       submission.assaultDescription = submission.assaultDescription.concat(response[28] +"\n");
+      title = title.concat(response[28] + ' ');
     }
 
     if(response[29]) {
       submission.assaultDescription = submission.assaultDescription.concat('Additional Comments: '+ response[29] +"\n");
+      title = title.concat(response[29] + ' ');
     }
 
     if (!submission.assaultDescription.length) {
       submission.assaultDescription = 'N/A';
+    }
+
+    if (!title.length) {
+      title = 'N/A';
     }
 
     submission.support = {};
@@ -421,14 +448,7 @@ async function importBDLResponses(googleResponses) {
     submission.perpetrator.height = response[17] || 'N/A';
     submission.perpetrator.perpType = 'N/A';
     submission.perpetrator.attributes = "";
-    submission.editedReport = null;
 
-    /*  There is no edited report we can easily pull from so we will build this
-     *  from what we have
-    submission.editedReport.title = null;
-    submission.editedReport.content = null;
-    */
-   
     if (response[19]) {
       submission.perpetrator.attributes = response[19];
     }
@@ -443,24 +463,33 @@ async function importBDLResponses(googleResponses) {
     }
 
     submission.perpetrator.hair = 'N/A';
-    //console.debug(submission);
+
+    /*  There is no edited report we can easily pull from so we will build this
+     *  from what we have */
+    submission.editedReport = {};
+    submission.editedReport.title = 
+      title.split(" ").slice(0, 5).join(" ");
+    submission.editedReport.content = submission.assaultDescription;
+    // This publishes the report
+    submission.edited = true;
+
+    // TODO: look this up from the submission.city
+    submission.geolocation = {};
+    submission.geolocation.type = 'Point';
+    // aka 1089 Mission St., SF, CA, 94103
+    submission.geolocation.coordinates = [ -122.4104418002654, 37.77957783530549 ];
+   
+    url = PREFIX + API_SERVER + '/api/reports/new';
     console.log('importBDLResponses() '+ url);
 
     // we do not need to authenticate to add a report
     //let report = await axios.post(url, submission, JSON.parse(config))
     let report = await axios.post(url, submission)
-	  /*
-    .then((response) => {
-      console.log('importBDLResponses() response: ');
-      console.log(response);
-      return response;
-    })
-    */
-    .catch((error) => {
-      console.debug('importBDLResponses() adding report failed: '+ Object.keys(error));
-      console.debug(error.response.data.error);
-      throw new TypeError(error.message + ', There was an error adding a node report');
-    });
+      .catch((error) => {
+        console.debug('importBDLResponses() adding report failed: '+ Object.keys(error));
+        console.debug(error.response.data.error);
+        throw new TypeError(error.message + ', There was an error adding a node report');
+      });
     console.log('importBDLResponses() added submission');
   }
   return googleResponses;
